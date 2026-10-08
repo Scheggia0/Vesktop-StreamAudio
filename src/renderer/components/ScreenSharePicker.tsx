@@ -28,6 +28,7 @@ import {
     Modal,
     openModal,
     Select,
+    Slider,
     UserStore,
     useState
 } from "@vencord/types/webpack/common";
@@ -35,7 +36,7 @@ import { Node } from "@vencord/venmic";
 import type { Dispatch, SetStateAction } from "react";
 import { addPatch } from "renderer/patches/shared";
 import { State, useSettings, useVesktopState } from "renderer/settings";
-import { isLinux, isWindows } from "renderer/utils";
+import { isLinux, isMac, isWindows } from "renderer/utils";
 
 import { SimpleErrorBoundary } from "./SimpleErrorBoundary";
 
@@ -75,6 +76,8 @@ interface Source {
 }
 
 export let currentSettings: StreamSettings | null = null;
+
+export const DEFAULT_MAC_AUDIO_DELAY = 100;
 
 const logger = new Logger("VesktopScreenShare");
 
@@ -432,7 +435,7 @@ function StreamSettingsUi({
                                 a much sharper and clearer image.
                             </Paragraph>
                         </div>
-                        {isWindows && (
+                        {(isWindows || isMac) && (
                             <FormSwitch
                                 title="Stream With Audio"
                                 hideBorder
@@ -440,6 +443,25 @@ function StreamSettingsUi({
                                 onChange={checked => setSettings(s => ({ ...s, audio: checked }))}
                                 className={cl("audio")}
                             />
+                        )}
+                        {isMac && settings.audio && (
+                            <div className={Margins.top8}>
+                                <Heading tag="h5">Audio Delay</Heading>
+                                <Slider
+                                    initialValue={Settings.audio?.delay ?? DEFAULT_MAC_AUDIO_DELAY}
+                                    minValue={0}
+                                    maxValue={500}
+                                    markers={[0, 50, 100, 150, 200, 300, 400, 500]}
+                                    stickToMarkers
+                                    onValueRender={v => `${Math.round(v)} ms`}
+                                    onMarkerRender={v => `${v}`}
+                                    onValueChange={v => (Settings.audio = { ...Settings.audio, delay: v })}
+                                />
+                                <Paragraph>
+                                    Video takes longer to encode than audio. Raise this if viewers hear the sound before
+                                    they see it.
+                                </Paragraph>
+                            </div>
                         )}
                     </section>
                 </div>

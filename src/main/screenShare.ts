@@ -15,7 +15,16 @@ import { handle } from "./utils/ipcWrappers";
 const isWayland =
     process.platform === "linux" && (process.env.XDG_SESSION_TYPE === "wayland" || !!process.env.WAYLAND_DISPLAY);
 
-const supportsLoopbackWithoutChrome = process.platform === "win32" && Number(release().split(".").pop()) >= 19045;
+function isMacOSAtLeast(major: number, minor = 0) {
+    if (process.platform !== "darwin") return false;
+    const [actualMajor, actualMinor = 0] = process.getSystemVersion().split(".").map(Number);
+    return actualMajor > major || (actualMajor === major && actualMinor >= minor);
+}
+
+// macOS system audio capture needs ScreenCaptureKit (13+). Core Audio taps (14.2+) can also exclude our own audio
+const supportsLoopback = process.platform === "win32" || isMacOSAtLeast(13);
+const supportsLoopbackWithoutChrome =
+    (process.platform === "win32" && Number(release().split(".").pop()) >= 19045) || isMacOSAtLeast(14, 2);
 
 export function registerScreenShareHandler() {
     handle(IpcEvents.CAPTURER_GET_LARGE_THUMBNAIL, async (_, id: string) => {
@@ -81,7 +90,8 @@ export function registerScreenShareHandler() {
         const streams: Streams = {
             video: source
         };
-        if (choice.audio && process.platform === "win32") {
+        if (choice.audio && supportsLoopback) {
+            if (!request.audioRequested) console.warn("Stream audio was selected, but the page did not request audio");
             // @ts-expect-error loopbackWithoutChrome is real but not documented
             streams.audio = supportsLoopbackWithoutChrome ? "loopbackWithoutChrome" : "loopback";
         }

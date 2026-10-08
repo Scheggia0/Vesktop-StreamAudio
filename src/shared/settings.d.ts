@@ -53,6 +53,9 @@ export interface Settings {
         mute?: boolean;
         onlySpeakers?: boolean;
         onlyDefaultSpeakers?: boolean;
+
+        /** macOS only: delay applied to stream audio in ms, to keep it in sync with the slower video */
+        delay?: number;
     };
 }
 
