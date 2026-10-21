@@ -5,6 +5,7 @@
  */
 
 import type { Rectangle } from "electron";
+import { KeyBind } from "renderer/globalShortcuts/ShortcutSettings";
 
 export interface Settings {
     discordBranch: "stable" | "canary" | "ptb";
@@ -57,6 +58,8 @@ export interface Settings {
         /** macOS only: delay applied to stream audio in ms, to keep it in sync with the slower video */
         delay?: number;
     };
+
+    keyBinds?: KeyBind[];
 }
 
 export interface State {

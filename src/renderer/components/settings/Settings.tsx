@@ -10,6 +10,7 @@ import { classNameFactory } from "@vencord/types/api/Styles";
 import { BaseText, Divider, ErrorBoundary } from "@vencord/types/components";
 import { ComponentType } from "react";
 import { WebRTCIPHandlingPolicyPicker } from "renderer/components/settings/WebRTCIPHandlingPolicyPicker";
+import { KeybindsButton } from "renderer/globalShortcuts/ShortcutSettings";
 import { getValueAndOnChange, Settings, useSettings } from "renderer/settings";
 import { isMac } from "renderer/utils";
 
@@ -122,7 +123,8 @@ const SettingsOptions: Record<string, Array<BooleanSetting | SettingsComponent>>
             key: "disableSmoothScroll",
             title: "Disable smooth scrolling",
             description: "Disables smooth scrolling"
-        }
+        },
+        KeybindsButton
     ],
     Notifications: [
         NotificationBadgeToggle,
