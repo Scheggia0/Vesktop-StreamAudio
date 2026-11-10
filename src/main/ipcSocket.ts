@@ -4,11 +4,12 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { app } from "electron";
 import { rmSync } from "fs";
 import { rm } from "fs/promises";
 import { createServer, Server } from "net";
 import { join } from "path";
+
+import { app } from "electron";
 import { IpcCommands } from "shared/IpcEvents";
 
 import { sendRendererCommand } from "./ipcCommands";

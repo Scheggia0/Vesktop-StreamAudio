@@ -7,9 +7,9 @@
 import "./cli";
 import "./updater";
 import "./ipc";
+import "./rpc";
 import "./userAssets";
 import "./vesktopProtocol";
-
 import { app, BrowserWindow, nativeTheme } from "electron";
 import { IpcCommands } from "shared/IpcEvents";
 
@@ -20,11 +20,12 @@ import { createFirstLaunchTour } from "./firstLaunch";
 import { sendRendererCommand } from "./ipcCommands";
 import { initSocket } from "./ipcSocket";
 import { registerKeyBinds } from "./keyBinds";
-import { createWindows, mainWin } from "./mainWindow";
+import { createWindows, mainWin, openDeepLink } from "./mainWindow";
 import { registerMediaPermissionsHandler } from "./mediaPermissions";
 import { registerScreenShareHandler } from "./screenShare";
 import { Settings, State } from "./settings";
 import { setAsDefaultProtocolClient } from "./utils/setAsDefaultProtocolClient";
+import { showWindow } from "./utils/showWindow";
 import { isDeckGameMode } from "./utils/steamOS";
 
 console.log("Vesktop v" + app.getVersion());
@@ -39,7 +40,8 @@ export let enableHardwareAcceleration = true;
 function init() {
     setAsDefaultProtocolClient("discord");
 
-    const { disableSmoothScroll, hardwareAcceleration, hardwareVideoAcceleration } = Settings.store;
+    const { disableSmoothScroll, hardwareAcceleration, hardwareVideoAcceleration, hardwareVideoEncoding } =
+        Settings.store;
 
     const enabledFeatures = new Set(app.commandLine.getSwitchValue("enable-features").split(","));
     const disabledFeatures = new Set(app.commandLine.getSwitchValue("disable-features").split(","));
@@ -50,8 +52,11 @@ function init() {
         enableHardwareAcceleration = false;
         app.disableHardwareAcceleration();
     } else {
-        if (hardwareVideoAcceleration) {
+        if (hardwareVideoEncoding) {
             enabledFeatures.add("AcceleratedVideoEncoder");
+        }
+
+        if (hardwareVideoAcceleration) {
             enabledFeatures.add("AcceleratedVideoDecoder");
 
             if (isLinux) {
@@ -100,13 +105,14 @@ function init() {
     // In the Flatpak on SteamOS the theme is detected as light, but SteamOS only has a dark mode, so we just override it
     if (isDeckGameMode) nativeTheme.themeSource = "dark";
 
-    app.on("second-instance", (_event, _cmdLine, _cwd, data: any) => {
-        if (data.IS_DEV) app.quit();
-        else if (mainWin) {
-            if (mainWin.isMinimized()) mainWin.restore();
-            if (!mainWin.isVisible()) mainWin.show();
-            mainWin.focus();
-        }
+    app.on("second-instance", (_event, cmdLine, _cwd, data: any) => {
+        if (data?.IS_DEV) return app.quit();
+        if (!mainWin) return;
+
+        const deepLink = cmdLine.find(arg => arg.startsWith("discord://"));
+        if (deepLink) openDeepLink(deepLink);
+
+        showWindow(mainWin);
     });
 
     app.whenReady().then(async () => {
@@ -148,7 +154,12 @@ async function bootstrap() {
 // MacOS only event
 export let darwinURL: string | undefined;
 app.on("open-url", (_, url) => {
-    darwinURL = url;
+    if (mainWin) {
+        openDeepLink(url);
+        showWindow(mainWin);
+    } else {
+        darwinURL = url;
+    }
 });
 
 app.on("window-all-closed", () => {

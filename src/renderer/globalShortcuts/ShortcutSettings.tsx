@@ -5,8 +5,7 @@
  */
 
 import "./ShortcutSettings.css";
-
-import { BaseText, Button, Card, DeleteIcon, Switch } from "@vencord/types/components";
+import { Button, Card, DeleteIcon, Switch, Text } from "@vencord/types/components";
 import { classNameFactory, identity } from "@vencord/types/utils";
 import { Modal, openModal, React, Select, useState } from "@vencord/types/webpack/common";
 import { SettingsComponent } from "renderer/components/settings/Settings";
@@ -64,12 +63,12 @@ function KeyBindGroup({
 
     return (
         <div className={cl("group")}>
-            <BaseText size="md" weight="medium" className={cl("label")} id={actionId}>
+            <Text size="md" weight="medium" className={cl("label")} id={actionId}>
                 Action
-            </BaseText>
-            <BaseText size="md" weight="medium" className={cl("label")} id={keyId}>
+            </Text>
+            <Text size="md" weight="medium" className={cl("label")} id={keyId}>
                 Keybind
-            </BaseText>
+            </Text>
 
             {/* @ts-expect-error incorrect type for aria-labelledby */}
             <Select
@@ -128,9 +127,9 @@ export function KeyBindSettings() {
         <div className={cl("container")}>
             {shortcutsStatus === false && (
                 <Card variant="danger">
-                    <BaseText size="md" weight="medium">
+                    <Text size="md" weight="medium">
                         Some of your keybinds failed to register.
-                    </BaseText>
+                    </Text>
                 </Card>
             )}
 
