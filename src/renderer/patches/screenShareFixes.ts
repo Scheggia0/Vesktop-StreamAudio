@@ -46,12 +46,7 @@ function applyStreamQuality(conn: any, track: MediaStreamTrack) {
     const size = { width, height, framerate: frameRate };
     const bitrateMax = getMaxBitrate(width, height, frameRate);
 
-    // Discord starts streams at 0.6 Mbps and climbs slowly, so the first minutes look blurry; start higher
-    // and never drop below a floor that keeps text readable
-    const bitrateMin = Math.min(2.5e6, bitrateMax);
-    const bitrateTarget = Math.min(6e6, bitrateMax);
-
-    conn.videoQualityManager.setGoliveQuality({ capture: size, encode: size, bitrateMax, bitrateMin, bitrateTarget });
+    conn.videoQualityManager.setGoliveQuality({ capture: size, encode: size, bitrateMax });
 
     const params = conn.videoStreamParameters.find((p: any) => p.quality === 100) ?? conn.videoStreamParameters[0];
     if (params) {
@@ -64,8 +59,6 @@ function applyStreamQuality(conn: any, track: MediaStreamTrack) {
         width,
         height,
         frameRate,
-        bitrateMin,
-        bitrateTarget,
         bitrateMax,
         track: settings
     });
@@ -182,12 +175,72 @@ function delayAudioTrack(track: MediaStreamTrack, delayMs: number) {
     return delayed;
 }
 
+// Chromium's bandwidth estimate starts at 0.3 Mbps and barely climbs on Discord's servers even with no loss,
+// so screen shares sat at 360p. Give the stream a floor and a start rate in the answer SDP, and raise the
+// encoder's ceiling. About 6 Mbps for 1440p60, less for smaller presets; only for our screen tracks.
+const screenTracks = new WeakSet<MediaStreamTrack>();
+
+function getBitrateFloor() {
+    const { resolution, frameRate } = getStreamQuality();
+    const height = resolution || 1440;
+    const kbps = (((height * 16) / 9) * height * frameRate * 0.027) / 1000;
+    return Math.round(Math.min(Math.max(kbps, 1500), 6000));
+}
+
+const hasScreenTrack = (pc: RTCPeerConnection) => pc.getSenders().some(s => s.track && screenTracks.has(s.track));
+
+const originalSetRemoteDescription = RTCPeerConnection.prototype.setRemoteDescription;
+RTCPeerConnection.prototype.setRemoteDescription = function (
+    this: RTCPeerConnection,
+    desc?: RTCSessionDescriptionInit,
+    ...rest: any[]
+) {
+    if (desc?.type === "answer" && desc.sdp && hasScreenTrack(this)) {
+        try {
+            const floor = getBitrateFloor();
+            const start = Math.round(floor * 1.33);
+            let inVideo = false;
+            const sdp = desc.sdp
+                .split("\r\n")
+                .map(line => {
+                    if (line.startsWith("m=")) inVideo = line.startsWith("m=video");
+                    if (
+                        !inVideo ||
+                        !/^a=fmtp:\d+ /.test(line) ||
+                        line.includes("apt=") ||
+                        line.includes("x-google-min-bitrate")
+                    )
+                        return line;
+                    return `${line};x-google-min-bitrate=${floor};x-google-start-bitrate=${start}`;
+                })
+                .join("\r\n");
+            desc = { type: desc.type, sdp };
+            logger.info(`Stream bitrate floor ${floor} kbps, start ${start} kbps`);
+        } catch (e) {
+            logger.error("Failed to set the stream bitrate floor", e);
+        }
+    }
+    return (originalSetRemoteDescription as any).call(this, desc, ...rest);
+} as typeof RTCPeerConnection.prototype.setRemoteDescription;
+
+const originalSetParameters = RTCRtpSender.prototype.setParameters;
+RTCRtpSender.prototype.setParameters = function (this: RTCRtpSender, params: RTCRtpSendParameters, ...rest: any[]) {
+    if (this.track && screenTracks.has(this.track)) {
+        const ceiling = getBitrateFloor() * 2000;
+        for (const encoding of params?.encodings ?? []) {
+            if (encoding.maxBitrate && encoding.maxBitrate < ceiling) encoding.maxBitrate = ceiling;
+        }
+    }
+    return originalSetParameters.call(this, params, ...rest);
+} as typeof RTCRtpSender.prototype.setParameters;
+
 const originalGetDisplayMedia = navigator.mediaDevices.getDisplayMedia;
 navigator.mediaDevices.getDisplayMedia = async function (opts) {
     // our picker runs while this is pending, so the quality is final once it resolves
     const stream = await originalGetDisplayMedia.call(this, opts);
     const { resolution, frameRate } = getStreamQuality();
     const track = stream.getVideoTracks()[0];
+    screenTracks.add(track);
 
     if (currentSettings?.contentHint) track.contentHint = currentSettings.contentHint;
 
