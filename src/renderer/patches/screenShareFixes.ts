@@ -46,7 +46,12 @@ function applyStreamQuality(conn: any, track: MediaStreamTrack) {
     const size = { width, height, framerate: frameRate };
     const bitrateMax = getMaxBitrate(width, height, frameRate);
 
-    conn.videoQualityManager.setGoliveQuality({ capture: size, encode: size, bitrateMax });
+    // Discord starts streams at 0.6 Mbps and climbs slowly, so the first minutes look blurry; start higher
+    // and never drop below a floor that keeps text readable
+    const bitrateMin = Math.min(2.5e6, bitrateMax);
+    const bitrateTarget = Math.min(6e6, bitrateMax);
+
+    conn.videoQualityManager.setGoliveQuality({ capture: size, encode: size, bitrateMax, bitrateMin, bitrateTarget });
 
     const params = conn.videoStreamParameters.find((p: any) => p.quality === 100) ?? conn.videoStreamParameters[0];
     if (params) {
@@ -55,7 +60,15 @@ function applyStreamQuality(conn: any, track: MediaStreamTrack) {
             : { type: "source", width: 0, height: 0 };
     }
 
-    logger.info("Applied stream quality", { width, height, frameRate, bitrateMax, track: settings });
+    logger.info("Applied stream quality", {
+        width,
+        height,
+        frameRate,
+        bitrateMin,
+        bitrateTarget,
+        bitrateMax,
+        track: settings
+    });
 }
 
 addPatch({
@@ -75,16 +88,6 @@ addPatch({
                     replace: "$1return $self.updateOngoingStream(this,$3);"
                 }
             ]
-        },
-        {
-            // Video quality manager
-            find: "getDefaultGoliveQuality(){",
-            replacement: {
-                // When viewers want a smaller resolution, Discord lowers the bitrate but keeps encoding at the full
-                // resolution. Lower the encode resolution too, like the native client does
-                match: /(getGoliveQuality\(\i,(\i)\)\{.+?return new \i\(\{encode:)this\.goliveMaxQuality\.encode/,
-                replace: "$1$self.scaleEncodeToSinkWants(this.goliveMaxQuality.encode,$2)"
-            }
         },
         {
             // Stereo stream audio (sending and receiving) and a higher audio bitrate are behind an experiment
@@ -110,21 +113,6 @@ addPatch({
             applyStreamQuality(conn, track);
         } catch (e) {
             logger.error("Failed to apply stream quality", e);
-        }
-    },
-
-    scaleEncodeToSinkWants(encode: { width: number; height: number; framerate: number }, sinkPixelCount: number) {
-        try {
-            const scale = Math.sqrt(sinkPixelCount / (encode.width * encode.height));
-            if (!(scale < 1)) return encode;
-
-            return {
-                ...encode,
-                width: Math.round(encode.width * scale),
-                height: Math.round(encode.height * scale)
-            };
-        } catch (e) {
-            logger.error("Failed to scale encode to sink wants", e);
         }
     },
 
